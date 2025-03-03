@@ -1,0 +1,181 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Kullanıcı modeli
+model User {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique
+  email         String    @unique
+  password      String
+  avatar        String?
+  bio           String?
+  role          String    @default("user") // user, moderator, admin
+  points        Int       @default(0)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // İlişkiler
+  createdStories    Story[]         @relation("CreatedByUser")
+  createdChapters   Chapter[]       @relation("ChapterAuthor")
+  createdOptions    Option[]        @relation("OptionCreator")
+  votes             Vote[]
+  userBadges        UserBadge[]
+  notifications     Notification[]
+  createdEvents     ScheduledEvent[] @relation("EventCreator")
+
+  @@map("users")
+}
+
+// Hikaye modeli
+model Story {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  coverImage  String?   @map("cover_image")
+  status      String    @default("active") // active, completed, archived
+  createdById Int       @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // İlişkiler
+  createdBy   User      @relation("CreatedByUser", fields: [createdById], references: [id])
+  chapters    Chapter[]
+
+  @@map("stories")
+}
+
+// Bölüm modeli
+model Chapter {
+  id              Int       @id @default(autoincrement())
+  storyId         Int       @map("story_id")
+  title           String
+  content         String
+  parentChapterId Int?      @map("parent_chapter_id")
+  sequence        Int
+  status          String    @default("draft") // draft, published, locked
+  createdById     Int       @map("created_by")
+  publishedAt     DateTime? @map("published_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // İlişkiler
+  story           Story     @relation(fields: [storyId], references: [id])
+  createdBy       User      @relation("ChapterAuthor", fields: [createdById], references: [id])
+  parentChapter   Chapter?  @relation("ChapterTree", fields: [parentChapterId], references: [id])
+  childChapters   Chapter[] @relation("ChapterTree")
+  options         Option[]
+
+  @@map("chapters")
+}
+
+// Seçenek modeli
+model Option {
+  id          Int       @id @default(autoincrement())
+  chapterId   Int       @map("chapter_id")
+  title       String
+  description String?
+  createdById Int       @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // İlişkiler
+  chapter     Chapter   @relation(fields: [chapterId], references: [id])
+  createdBy   User      @relation("OptionCreator", fields: [createdById], references: [id])
+  votes       Vote[]
+
+  @@map("options")
+}
+
+// Oy modeli
+model Vote {
+  id        Int      @id @default(autoincrement())
+  optionId  Int      @map("option_id")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // İlişkiler
+  option    Option   @relation(fields: [optionId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([optionId, userId])
+  @@map("votes")
+}
+
+// Rozet modeli
+model Badge {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  image       String?
+  points      Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // İlişkiler
+  userBadges  UserBadge[]
+
+  @@map("badges")
+}
+
+// Kullanıcı Rozet modeli
+model UserBadge {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  badgeId   Int      @map("badge_id")
+  awardedAt DateTime @default(now()) @map("awarded_at")
+
+  // İlişkiler
+  user      User     @relation(fields: [userId], references: [id])
+  badge     Badge    @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+// Zamanlanmış Etkinlik modeli
+model ScheduledEvent {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  type        String    // chapter_release, contest, etc.
+  relatedId   Int?      @map("related_id")
+  scheduledAt DateTime  @map("scheduled_at")
+  status      String    @default("pending") // pending, completed, cancelled
+  createdById Int       @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // İlişkiler
+  createdBy   User      @relation("EventCreator", fields: [createdById], references: [id])
+
+  @@map("scheduled_events")
+}
+
+// Bildirim modeli
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  title     String
+  content   String
+  type      String    // new_chapter, vote_result, badge_earned, etc.
+  relatedId Int?      @map("related_id")
+  isRead    Boolean   @default(false) @map("is_read")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // İlişkiler
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
