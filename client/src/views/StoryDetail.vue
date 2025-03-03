@@ -1,6 +1,7 @@
 <template>
   <div class="story-detail-page">
     <div v-if="loading" class="loading">
+      <div class="spinner"></div>
       Hikaye yükleniyor...
     </div>
 
@@ -11,7 +12,7 @@
     <div v-else-if="story" class="story-container">
       <div class="story-header">
         <div class="story-cover">
-          <img :src="story.coverImage || '/default-story.jpg'" :alt="story.title" />
+          <img :src="story.coverImage || '/images/korku1.jpg'" :alt="story.title" />
           <div class="story-status" :class="getStatusClass(story.status)">
             {{ getStatusText(story.status) }}
           </div>
@@ -47,7 +48,10 @@
                 <span>{{ chapter.readTime }} dk okuma</span>
               </div>
             </div>
-            <router-link :to="`/chapters/${chapter.id}`" class="btn btn-primary">
+            <router-link 
+              :to="`/bolum/${chapter.id}/${slugify(chapter.title)}`" 
+              class="btn btn-primary"
+            >
               Oku
             </router-link>
           </div>
@@ -59,7 +63,7 @@
         <p>Bu hikayeye yeni bir bölüm ekleyerek katkıda bulunabilirsiniz.</p>
         <router-link 
           v-if="isLoggedIn" 
-          :to="`/stories/${story.id}/contribute`" 
+          :to="`/hikaye/${story.id}/${slugify(story.title)}/yeni-bolum`" 
           class="btn btn-primary"
         >
           Yeni Bölüm Ekle
@@ -81,6 +85,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import axios from 'axios';
+import { processImageUrl } from '../utils/imageUtils';
 
 const route = useRoute();
 const authStore = useAuthStore();
@@ -95,6 +100,7 @@ interface Story {
   status: 'active' | 'completed' | 'archived';
   author: string;
   createdAt: string;
+  userId: number | null;
 }
 
 interface Chapter {
@@ -121,8 +127,8 @@ onMounted(async () => {
   }
   
   try {
-    // API'den hikaye detaylarını al
-    const response = await axios.get(`/api/stories/${storyId}`);
+    // API'den hikaye detaylarını al - doğru endpoint kullan
+    const response = await axios.get(`http://localhost:3001/api/stories/${storyId}`);
     console.log('Hikaye detayı yanıtı:', response.data);
     
     // API yanıtını kontrol et ve hikaye verisini ayarla
@@ -134,10 +140,11 @@ onMounted(async () => {
         id: storyData.id,
         title: storyData.title,
         description: storyData.description || '',
-        coverImage: storyData.coverImage || '/default-story.jpg',
+        coverImage: processImageUrl(storyData.coverImage),
         status: storyData.status,
         author: storyData.createdBy?.username || 'Anonim',
-        createdAt: storyData.createdAt
+        createdAt: storyData.createdAt,
+        userId: storyData.createdBy?.id || null
       };
       
       // Bölümleri ayarla (API yanıtında varsa)
@@ -150,8 +157,23 @@ onMounted(async () => {
           readTime: estimateReadTime(chapter.content || '')
         }));
       } else {
-        // Ayrı bir API çağrısı yapmaya gerek yok, zaten hikaye verisinde bölümler var
-        console.log('Hikaye verisinde bölümler zaten mevcut');
+        // API'den bölümleri ayrıca al
+        try {
+          const chaptersResponse = await axios.get(`/api/stories/${storyId}/chapters`);
+          if (chaptersResponse.data && Array.isArray(chaptersResponse.data)) {
+            chapters.value = chaptersResponse.data.map((chapter: any) => ({
+              id: chapter.id,
+              title: chapter.title,
+              summary: chapter.content ? truncateText(chapter.content, 150) : 'Bölüm özeti bulunmuyor.',
+              publishedAt: chapter.publishedAt || chapter.createdAt,
+              readTime: estimateReadTime(chapter.content || '')
+            }));
+          }
+        } catch (chapterErr) {
+          console.error('Bölümler yüklenirken hata:', chapterErr);
+          // Örnek veri kullan
+          useExampleChapters(Number(storyId));
+        }
       }
     } else {
       throw new Error('Geçersiz API yanıtı');
@@ -179,12 +201,19 @@ const useExampleData = (storyId: number) => {
     id: storyId,
     title: 'Gizemli Orman',
     description: 'Küçük bir kasabanın yakınındaki ormanda garip olaylar yaşanmaya başlar. Kasabalılar, ormanda kaybolan insanların hikayelerini anlatırken, genç bir gazeteci gerçeği ortaya çıkarmak için ormana girer. Bu hikaye, doğaüstü olaylar, gizem ve macera dolu bir yolculuğu anlatıyor.',
-    coverImage: '/stories/forest.jpg',
+    coverImage: '/images/korku1.jpg',
     status: 'active',
     author: 'AhmetYazar',
-    createdAt: '2023-02-15T10:30:00Z'
+    createdAt: '2023-02-15T10:30:00Z',
+    userId: null
   };
   
+  // Örnek bölümleri de yükle
+  useExampleChapters(storyId);
+};
+
+// Örnek bölüm verileri
+const useExampleChapters = (storyId: number) => {
   chapters.value = [
     {
       id: 1,
@@ -232,6 +261,17 @@ const formatDate = (dateString: string) => {
   }).format(date);
 };
 
+const slugify = (text: string) => {
+  return text
+    .toString()
+    .toLowerCase()
+    .replace(/\s+/g, '-')           // Boşlukları tire ile değiştir
+    .replace(/[^\w\-]+/g, '')       // Alfanumerik olmayan karakterleri kaldır
+    .replace(/\-\-+/g, '-')         // Birden fazla tireyi tek tire ile değiştir
+    .replace(/^-+/, '')             // Baştaki tireleri kaldır
+    .replace(/-+$/, '');            // Sondaki tireleri kaldır
+};
+
 const getStatusClass = (status: string) => {
   switch (status) {
     case 'active': return 'status-active';
@@ -254,6 +294,8 @@ const getStatusText = (status: string) => {
 <style scoped>
 .story-detail-page {
   padding: 2rem 0;
+  background-color: var(--gray-100);
+  min-height: 85vh;
 }
 
 .loading {
@@ -261,6 +303,25 @@ const getStatusText = (status: string) => {
   padding: 3rem;
   font-size: 1.2rem;
   color: var(--secondary-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-left-color: var(--primary-color);
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .story-container {
@@ -273,9 +334,9 @@ const getStatusText = (status: string) => {
   gap: 2rem;
   margin-bottom: 3rem;
   background-color: white;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .story-cover {
@@ -284,12 +345,18 @@ const getStatusText = (status: string) => {
   height: 400px;
   border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .story-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.story-cover:hover img {
+  transform: scale(1.05);
 }
 
 .story-status {
@@ -301,6 +368,7 @@ const getStatusText = (status: string) => {
   font-size: 0.8rem;
   font-weight: bold;
   color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .status-active {
@@ -322,7 +390,8 @@ const getStatusText = (status: string) => {
 .story-info h1 {
   margin: 0 0 1rem 0;
   color: var(--dark-color);
-  font-size: 2rem;
+  font-size: 2.2rem;
+  line-height: 1.2;
 }
 
 .story-meta {
@@ -340,15 +409,16 @@ const getStatusText = (status: string) => {
 .story-description {
   line-height: 1.6;
   color: var(--dark-color);
+  font-size: 1.05rem;
 }
 
 .story-chapters,
 .story-contribute {
   background-color: white;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 2rem;
   margin-bottom: 2rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .story-chapters h2,
@@ -356,6 +426,21 @@ const getStatusText = (status: string) => {
   margin-top: 0;
   margin-bottom: 1.5rem;
   color: var(--dark-color);
+  font-size: 1.5rem;
+  position: relative;
+  padding-bottom: 0.5rem;
+}
+
+.story-chapters h2::after,
+.story-contribute h2::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 50px;
+  height: 3px;
+  background-color: var(--primary-color);
+  border-radius: 3px;
 }
 
 .no-chapters {
@@ -377,11 +462,14 @@ const getStatusText = (status: string) => {
   padding: 1.5rem;
   background-color: var(--light-color);
   border-radius: 8px;
-  transition: transform 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .chapter-item:hover {
   transform: translateX(5px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  background-color: #f0f7ff;
 }
 
 .chapter-info {
@@ -391,11 +479,13 @@ const getStatusText = (status: string) => {
 .chapter-info h3 {
   margin: 0 0 0.5rem 0;
   color: var(--primary-color);
+  font-size: 1.2rem;
 }
 
 .chapter-info p {
   margin: 0 0 0.5rem 0;
   color: var(--secondary-color);
+  line-height: 1.5;
 }
 
 .chapter-meta {
@@ -407,10 +497,51 @@ const getStatusText = (status: string) => {
 
 .story-contribute {
   text-align: center;
+  padding: 3rem 2rem;
+  background-color: #f0f7ff;
 }
 
 .story-contribute p {
   margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+  color: var(--dark-color);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.btn {
+  padding: 0.5rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-secondary {
+  background-color: var(--secondary-color);
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #6a7a7c;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 @media (max-width: 768px) {

@@ -257,7 +257,7 @@ export async function GET(
 ) {
   try {
     // Next.js uyarısına göre params.id kullanımını düzeltiyoruz
-    const storyId = params.id;
+    const { id: storyId } = params;
     const id = parseInt(storyId);
     
     if (isNaN(id)) {
@@ -267,7 +267,7 @@ export async function GET(
       );
     }
 
-    // Örnek verilerden hikayeyi bul
+    // Örnek hikaye verilerinden ID'ye göre hikayeyi bul
     const story = sampleStories.find(story => story.id === id);
 
     if (!story) {
@@ -293,8 +293,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Next.js uyarısına göre params.id kullanımını düzeltiyoruz
-    const storyId = params.id;
+    const { id: storyId } = params;
     const id = parseInt(storyId);
     
     if (isNaN(id)) {
@@ -305,9 +304,8 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { title, description, coverImage, status } = body;
     
-    // Örnek verilerden hikayeyi bul
+    // Hikayenin varlığını kontrol et
     const storyIndex = sampleStories.findIndex(story => story.id === id);
 
     if (storyIndex === -1) {
@@ -316,16 +314,15 @@ export async function PATCH(
         { status: 404 }
       );
     }
-    
-    // Hikayeyi güncelle (gerçek uygulamada veritabanında güncellenir)
+
+    // Hikayeyi güncelle (örnek olarak)
     const updatedStory = {
       ...sampleStories[storyIndex],
-      ...(title && { title }),
-      ...(description !== undefined && { description }),
-      ...(coverImage !== undefined && { coverImage }),
-      ...(status && { status })
+      ...body,
+      updatedAt: new Date().toISOString()
     };
 
+    // Gerçek bir veritabanı olmadığı için sadece başarılı yanıt dönüyoruz
     return NextResponse.json(
       { message: 'Hikaye başarıyla güncellendi', story: updatedStory },
       { status: 200 }
@@ -356,7 +353,7 @@ export async function DELETE(
       );
     }
 
-    // Örnek verilerden hikayeyi bul
+    // Hikayenin varlığını kontrol et
     const storyIndex = sampleStories.findIndex(story => story.id === id);
 
     if (storyIndex === -1) {
@@ -366,7 +363,7 @@ export async function DELETE(
       );
     }
 
-    // Gerçek uygulamada veritabanından silinir
+    // Gerçek bir veritabanı olmadığı için sadece başarılı yanıt dönüyoruz
     return NextResponse.json(
       { message: 'Hikaye başarıyla silindi' },
       { status: 200 }

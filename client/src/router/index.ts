@@ -10,6 +10,8 @@ const StoryDetail = () => import('../views/StoryDetail.vue');
 const ChapterDetail = () => import('../views/ChapterDetail.vue');
 const Profile = () => import('../views/Profile.vue');
 const NotFound = () => import('../views/NotFound.vue');
+const NewChapter = () => import('../views/NewChapter.vue');
+const CreateStory = () => import('../views/CreateStory.vue');
 
 const routes = [
   {
@@ -37,18 +39,31 @@ const routes = [
     meta: { title: 'Hikayeler' }
   },
   {
-    path: '/stories/:id',
+    path: '/stories/create',
+    name: 'create-story',
+    component: CreateStory,
+    meta: { title: 'Yeni Hikaye Oluştur', requiresAuth: true }
+  },
+  {
+    path: '/hikaye/:id/:slug',
     name: 'story-detail',
     component: StoryDetail,
     props: true,
     meta: { title: 'Hikaye Detayı' }
   },
   {
-    path: '/chapters/:id',
+    path: '/bolum/:id/:slug',
     name: 'chapter-detail',
     component: ChapterDetail,
     props: true,
     meta: { title: 'Bölüm Detayı' }
+  },
+  {
+    path: '/hikaye/:storyId/:storySlug/yeni-bolum',
+    name: 'new-chapter',
+    component: NewChapter,
+    props: true,
+    meta: { title: 'Yeni Bölüm Ekle', requiresAuth: true }
   },
   {
     path: '/profile',
